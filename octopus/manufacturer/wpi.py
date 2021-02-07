@@ -7,8 +7,8 @@ from twisted.internet import reactor, defer, protocol, error
 from twisted.python import log
 
 # Package Imports
-from ..machine import Machine, Property, Stream, ui
-from ..util import now, AsyncQueue, AsyncQueueRetry
+from octopus.machine import Machine, Property, Stream, ui
+from octopus.util import now, AsyncQueue, AsyncQueueRetry
 
 # System Imports
 import crc16, struct, logging
