@@ -10,8 +10,10 @@ from twisted.python import log
 from octopus.machine import Machine, Property, Stream, ui
 from octopus.util import now, AsyncQueue, AsyncQueueRetry
 
+from octopus_wpi import crc16
+
 # System Imports
-import crc16, struct, logging
+import struct, logging
 
 __all__ = ["Aladdin"]
 
