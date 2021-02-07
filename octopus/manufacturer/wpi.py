@@ -4,7 +4,7 @@ World Precision Instruments
 
 # Twisted Imports
 from twisted.internet import reactor, defer, protocol, error
-from twisted.python import log
+from twisted.logging import Logger
 
 # Package Imports
 from octopus.machine import Machine, Property, Stream, ui
@@ -101,6 +101,8 @@ class SinglePumpReceiver (protocol.Protocol, object):
     MAX_LENGTH = 16384
     MAX_RETRIES = 2
 
+    log = Logger()
+
     @property
     def unit_id (self):
         return self._unit_id
@@ -126,9 +128,6 @@ class SinglePumpReceiver (protocol.Protocol, object):
 
         # Single pump: unit_id = 0
         self.unit_id = 0
-
-    def _log (self, msg, level = None):
-        log.msg("wpi.SinglePumpReceiver: %s" % (msg), logLevel = level)
 
     def dataReceived (self, data):
         """
@@ -194,7 +193,7 @@ class SinglePumpReceiver (protocol.Protocol, object):
         try:
             self._active_timeout.cancel()
         except (AttributeError, error.AlreadyCalled, error.AlreadyCancelled):
-            self._log("Unexpected response: %s (timed out?)" % line, logging.WARN)
+            self.log.warn("Unexpected response: {line} (timed out?)", line = line)
 
         try:
             address, status, msg = interpret_response(line, basic)
@@ -202,7 +201,7 @@ class SinglePumpReceiver (protocol.Protocol, object):
         except Alarm as a:
             # Emit a warning or error?
             # TODO: Special case for POWER_INTERRUPTED and TIMEOUT (ignore?)
-            self._log("Syringe Pump Alarm: %s" % a.type, logging.WARN)
+            self.log.warn("Syringe Pump Alarm: {alarm.type}", alarm = a)
 
             try:
                 self._active_retries = 0
@@ -213,7 +212,7 @@ class SinglePumpReceiver (protocol.Protocol, object):
             # Deal with alarm
 
         except CommandError as e:
-            self._log("Syringe Pump Error: %s" % e.type, logging.WARN)
+            self.log.warn("Syringe Pump Error: {error.type}", error = e)
 
             try:
                 self._active_retries = 0
@@ -223,7 +222,7 @@ class SinglePumpReceiver (protocol.Protocol, object):
 
         except SyntaxError:
             # Ask for repeat response
-            self._log("Syringe Pump Syntax Error: %s" % repr(line), logging.WARN)
+            self.log("Syringe Pump Syntax Error: {line!r}", line = line)
 
             try:
                 self._retry(self._active_command, d)
@@ -238,9 +237,9 @@ class SinglePumpReceiver (protocol.Protocol, object):
                     self._active_retries = 0
                     d.callback((status, msg))
                 except AttributeError:
-                    self._log("Ignoring response: %s (unexpected)" % line, logging.WARN)
+                    self.log.warn("Ignoring response: {line} (unexpected)", line = line)
             else:
-                self._log("Unexpected response from unit id %s" % address, logging.ERROR)
+                self.log.error("Unexpected response from unit id {address}", address = address)
 
     def _retry (self, task, d):
         if self._active_retries < self.MAX_RETRIES:
@@ -470,16 +469,24 @@ class Aladdin (Machine):
 
         def monitor ():
             return defer.gatherResults([
-                self.protocol.command("DIS").addCallback(interpretDispensed).addErrback(log.err),
-                self.protocol.command("RAT").addCallback(interpretRate).addErrback(log.err),
-                self.protocol.command("DIR").addCallback(interpretDirection).addErrback(log.err)
+                self.protocol.command("DIS").addCallback(interpretDispensed).addErrback(
+                    lambda f: self.log.failure("While getting dispensed volume", f)
+                ),
+                self.protocol.command("RAT").addCallback(interpretRate).addErrback(
+                    lambda f: self.log.failure("While getting rate", f)
+                ),
+                self.protocol.command("DIR").addCallback(interpretDirection).addErrback(
+                    lambda f: self.log.failure("While getting direction", f)
+                )
             ])
 
         def setMonitor (result):
             self._tick(monitor, 1)
 
         return defer.gatherResults([
-            self.protocol.command("STP").addErrback(log.err),
+            self.protocol.command("STP").addErrback(
+                lambda f: self.log.failure("While stopping pump", f)
+            ),
             self.protocol.command("SAF50"),
             self.protocol.command("VER"),
             self.protocol.command("DIA{:.3f}".format(self._syringe_diameter)[:8]),
@@ -495,7 +502,9 @@ class Aladdin (Machine):
         # Setup a single program phase with unlimited volume
         # Default to stopped (0 rate) and infuse direction.
         return defer.gatherResults([
-            self.protocol.command("STP").addErrback(log.err),
+            self.protocol.command("STP").addErrback(
+                lambda f: self.log.failure("While stopping pump", f)
+            ),
             self.protocol.command("PHN01"),
             self.protocol.command("FUNRAT"),
             self.protocol.command("VOL0"),
