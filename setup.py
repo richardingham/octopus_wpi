@@ -7,6 +7,12 @@ setuptools.setup(
     description="World Precision Instruments machines plugin for octopus.",
     url="https://github.com/richardingham/octopus_wpi",
     packages=['octopus.blocks', 'octopus.manufacturer'],
+    
+    entry_points={
+        "blocktopus_blocks": [
+            'aladdin_pump = octopus.blocks.wpi:machine_wpi_aladdin',
+        ]
+    }
 
     # install_requires=requirements,
     # include_package_data=True,
